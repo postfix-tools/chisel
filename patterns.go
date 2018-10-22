@@ -262,17 +262,18 @@ func parseQmgrLine(l string) (MailEvent, error) {
 
 // smtp
 type SMTPRecord struct {
-	Component  string
-	DateTime   time.Time
-	ProcessId  int
-	RecordType int
-	Sequence   int
-	Hostname   string
-	QueueID    string
-	To         string
-	Relay      string
-	Delay      int64
-	Status     string
+	Component     string
+	DateTime      time.Time
+	ProcessId     int
+	RecordType    int
+	Sequence      int
+	Hostname      string
+	QueueID       string
+	To            string
+	Relay         string
+	Delay         int64
+	Status        string
+	StatusMessage string
 }
 
 func (r *SMTPRecord) GetQID() string {
@@ -306,7 +307,19 @@ func parseSMTPLine(l string) (MailEvent, error) {
 		return &rec, nil
 	}
 	rec.DateTime = ts
-	mparts := strings.Fields(message)
+	qsplit := strings.SplitN(message, ": ", 2)
+	mparts := strings.Split(qsplit[1], ", ")
+
+	mcomponents := make(map[string]string)
+	for _, p := range mparts {
+		kvpair := strings.Split(p, "=")
+		if len(kvpair) == 2 {
+			k := kvpair[0]
+			v := kvpair[1]
+			mcomponents[k] = v
+		}
+	}
+
 	rec.QueueID = strings.Trim(mparts[0], ":")
 	if rec.QueueID == "warning" {
 		return &rec, nil
@@ -314,10 +327,12 @@ func parseSMTPLine(l string) (MailEvent, error) {
 		return &rec, nil
 	}
 
-	rec.To = strings.Trim(strings.Split(strings.Trim(mparts[1], "<>,"), "=")[1], "<>")
-	relay := strings.Split(strings.Trim(mparts[2], "],"), "=")[1]
-	delay := strings.Split(strings.Trim(mparts[3], ","), "=")[1]
-	rec.Status = strings.Split(strings.Split(mparts[4], " ")[0], "=")[1]
+	rec.To = mcomponents["to"]
+	relay := mcomponents["relay"]
+	delay := mcomponents["delay"]
+	status_split := strings.SplitN(mcomponents["status"], " ", 2)
+	rec.Status = status_split[0]
+	rec.StatusMessage = status_split[1]
 	rec.Delay, err = strconv.ParseInt(delay, 0, 0)
 	if err != nil {
 		return &rec, nil
